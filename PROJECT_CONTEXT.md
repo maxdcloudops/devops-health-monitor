@@ -22,16 +22,18 @@
 
 ## Текущее состояние кода
 
-### Написано (но с багами):
+### Написано:
 - `DevopsHealthMonitorApplication.java` — точка входа ✅
-- `model/Endpoint.java` — JPA entity ⚠️ баги (см. ниже)
-- `repository/EndpointRepository.java` — репозиторий ⚠️ баги
+- `model/Endpoint.java` — JPA entity ✅
+- `repository/EndpointRepository.java` — репозиторий ✅
 
-### Баги которые надо исправить:
-1. `Endpoint.java`: `Generationtype` → `GenerationType` (регистр!)
-2. `Endpoint.java`: пропущена `;` после `private String lastStatus`
-3. `EndpointRepository.java`: `findByActivetrue()` → `findByActiveTrue()`
-4. `pom.xml`: используется `spring-boot-starter-data-jdbc`, но код написан под JPA → нужно заменить на `spring-boot-starter-data-jpa`
+### Баги — исправлены ✅:
+1. ~~`Endpoint.java`: `Generationtype` → `GenerationType` (регистр!)~~
+2. ~~`Endpoint.java`: пропущена `;` после `private String lastStatus`~~
+3. ~~`EndpointRepository.java`: `findByActivetrue()` → `findByActiveTrue()`~~
+4. ~~`pom.xml`: используется `spring-boot-starter-data-jdbc`, но код написан под JPA → нужно заменить на `spring-boot-starter-data-jpa`~~
+
+Проверено: `./mvnw compile` проходит чисто.
 
 ### Не написано:
 - `service/EndpointService.java` ❌
@@ -43,8 +45,8 @@
 ## План разработки (по шагам)
 
 ### Фаза 1 — Основа (делаем сейчас)
-1. Исправить баги, добавить JPA в pom.xml
-2. Настроить H2 БД
+1. ~~Исправить баги, добавить JPA в pom.xml~~ ✅
+2. Настроить H2 БД ← сейчас здесь
 3. Написать Service слой
 4. Написать Controller (REST API)
 5. Запустить и проверить

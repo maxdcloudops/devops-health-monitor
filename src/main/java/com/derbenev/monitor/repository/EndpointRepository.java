@@ -8,6 +8,6 @@ import java.util.List;
 @Repository
 public interface EndpointRepository extends JpaRepository<Endpoint, Long>{
 
-    List<Endpoint> findByActivetrue();
+    List<Endpoint> findByActiveTrue();
     List<Endpoint> findByNameContainingIgnoreCase(String name);
 }

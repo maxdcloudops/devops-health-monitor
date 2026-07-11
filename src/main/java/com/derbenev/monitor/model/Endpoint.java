@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
 public class Endpoint {
 
     @Id
-    @GeneratedValue(strategy = Generationtype.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(nullable = false)
@@ -35,6 +35,6 @@ public class Endpoint {
     private LocalDateTime lastCheckedAt;
 
     @Column(name = "last_status")
-    private String lastStatus
+    private String lastStatus;
 
 }
