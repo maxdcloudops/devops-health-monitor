@@ -52,7 +52,17 @@
 - `DevopsHealthMonitorApplication.java` — точка входа ✅
 - `model/Endpoint.java` — JPA entity ✅ (пока в терминах старого домена — станет `Bot` в Фазе 2)
 - `repository/EndpointRepository.java` — репозиторий ✅
+- `service/EndpointService.java` — CRUD + поиск (getAll/getActive/searchByName/getById/create/update/delete) ✅
+- `controller/EndpointController.java` — REST API `/api/endpoints` (GET/POST/PUT/DELETE) ✅
+- `exception/EndpointNotFoundException.java` + `@ExceptionHandler` → 404 вместо 500 при несуществующем id ✅
 - `application.properties` — H2 подключена и работает ✅
+
+### Известная проблема окружения (не блокирует разработку):
+`pom.xml` указывает `java.version=26`, но в текущем контейнере установлен только JDK 21
+(Java 26 ещё не вышла как релиз на момент проверки). Сборка и тесты проверялись через
+`./mvnw compile -Dmaven.compiler.release=21` — компилируется и тесты проходят чисто.
+Нужно решить: либо понизить `java.version` в `pom.xml` до 21, либо доустановить JDK 26,
+когда она станет доступна в окружении.
 
 ### Баги — исправлены ✅:
 1. ~~`Endpoint.java`: `Generationtype` → `GenerationType` (регистр!)~~
@@ -63,22 +73,21 @@
 Проверено: `./mvnw compile` проходит чисто.
 
 ### Не написано:
-- `service/EndpointService.java` (в новом домене — `BotService`) ❌
-- `controller/EndpointController.java` (в новом домене — `BotController`) ❌
 - `model/Trade.java`, `model/DecisionLog.java` ❌
 - Frontend/UI ❌
 
 ## План разработки (по шагам)
 
-### Фаза 1 — Основа (делаем сейчас, домен ещё старый — `Endpoint`)
+### Фаза 1 — Основа ✅ завершена (домен ещё старый — `Endpoint`)
 1. ~~Исправить баги, добавить JPA в pom.xml~~ ✅
 2. ~~Настроить H2 БД~~ ✅
-3. Написать Service слой ← сейчас здесь
-4. Написать Controller (REST API)
-5. Запустить и проверить (CRUD по `Endpoint` работает end-to-end)
+3. ~~Написать Service слой~~ ✅
+4. ~~Написать Controller (REST API)~~ ✅
+5. ~~Запустить и проверить (CRUD по `Endpoint` работает end-to-end)~~ ✅ — `./mvnw test`
+   зелёный, Spring-контекст поднимается, таблица `endpoints` создаётся в H2.
 
-Эта фаза учебная — отрабатываем слои Controller → Service → Repository на простой
-модели, прежде чем переходить к более сложному домену ботов.
+Эта фаза учебная — отработали слои Controller → Service → Repository на простой
+модели, прежде чем переходить к более сложному домену ботов (Фаза 2).
 
 ### Фаза 2 — Разворот на домен ботов
 - `Endpoint` → `Bot` (id, name, статус, брокер, стратегия, lastHeartbeatAt)
