@@ -27,7 +27,8 @@
         <url/>
     </scm>
     <properties>
-        <java.version>26</java.version>
+        <java.version>21</java.version> <!-- было 26: контейнер разработки даёт только JDK 21 -->
+
     </properties>
     <dependencies>
         <dependency>
