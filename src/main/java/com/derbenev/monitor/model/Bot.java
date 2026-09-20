@@ -1,10 +1,9 @@
 package com.derbenev.monitor.model;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
-
 
 import java.time.LocalDateTime;
 
@@ -12,8 +11,8 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name="endpoints")
-public class Endpoint {
+@Table(name = "bots")
+public class Bot {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -23,18 +22,18 @@ public class Endpoint {
     private String name;
 
     @Column(nullable = false)
-    private String url;
+    private String broker;
 
     @Column(nullable = false)
-    private boolean active = true;
+    private String strategy;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private BotStatus status = BotStatus.STOPPED;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
-    @Column(name = "last_checked_at")
-    private LocalDateTime lastCheckedAt;
-
-    @Column(name = "last_status")
-    private String lastStatus;
-
+    @Column(name = "last_heartbeat_at")
+    private LocalDateTime lastHeartbeatAt;
 }

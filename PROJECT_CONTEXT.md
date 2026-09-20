@@ -50,27 +50,46 @@
 
 ### Написано:
 - `DevopsHealthMonitorApplication.java` — точка входа ✅
-- `model/Endpoint.java` — JPA entity ✅ (пока в терминах старого домена — станет `Bot` в Фазе 2)
-- `repository/EndpointRepository.java` — репозиторий ✅
-- `service/EndpointService.java` — CRUD + поиск (getAll/getActive/searchByName/getById/create/update/delete) ✅
-- `controller/EndpointController.java` — REST API `/api/endpoints` (GET/POST/PUT/DELETE) ✅
-- `exception/EndpointNotFoundException.java` + `@ExceptionHandler` → 404 вместо 500 при несуществующем id ✅
+- `model/Bot.java` — id, name, broker, strategy, status (enum `BotStatus`: RUNNING/STOPPED/DOWN),
+  createdAt, lastHeartbeatAt ✅
+- `model/Trade.java` — сделка бота: symbol, side (enum `TradeSide`: BUY/SELL), quantity, price,
+  pnl (все денежные поля — `BigDecimal`, не `double`, чтобы не терять точность), executedAt,
+  связь `@ManyToOne` на `Bot` ✅
+- `model/DecisionLog.java` — лог решений бота: action, reasoning (текст объяснения), timestamp,
+  связь `@ManyToOne` на `Bot` ✅
+- `repository/BotRepository.java`, `TradeRepository.java`, `DecisionLogRepository.java` ✅
+- `service/BotService.java` — CRUD + `recordHeartbeat(id)` (обновляет lastHeartbeatAt и
+  переводит статус в RUNNING) ✅
+- `service/TradeService.java`, `DecisionLogService.java` — запись + список по боту; при записи
+  бот всегда подставляется по id из URL на сервере (клиентский JSON с полем `bot` игнорируется,
+  чтобы нельзя было привязать сделку к чужому боту) ✅
+- `controller/BotController.java` — REST `/api/bots` (GET/POST/PUT/DELETE, фильтры по
+  status/name, `POST /{id}/heartbeat`) ✅
+- `controller/TradeController.java` — REST `/api/bots/{botId}/trades` (GET/POST) ✅
+- `controller/DecisionLogController.java` — REST `/api/bots/{botId}/decisions` (GET/POST) ✅
+- `exception/BotNotFoundException.java` + `exception/GlobalExceptionHandler.java`
+  (`@RestControllerAdvice`, общий на все контроллеры) → 404 вместо 500 при несуществующем id ✅
 - `application.properties` — H2 подключена и работает ✅
 
 ### Решено: `java.version` в `pom.xml` понижен с 26 до 21 ✅
 Контейнер разработки даёт только JDK 21, Java 26 ещё не вышла как релиз. `./mvnw test`
 теперь проходит без ручных флагов.
 
-### Баги — исправлены ✅:
-1. ~~`Endpoint.java`: `Generationtype` → `GenerationType` (регистр!)~~
-2. ~~`Endpoint.java`: пропущена `;` после `private String lastStatus`~~
-3. ~~`EndpointRepository.java`: `findByActivetrue()` → `findByActiveTrue()`~~
-4. ~~`pom.xml`: используется `spring-boot-starter-data-jdbc`, но код написан под JPA → нужно заменить на `spring-boot-starter-data-jpa`~~
-
-Проверено: `./mvnw compile` проходит чисто.
+### Известная проблема окружения: Spring Security блокирует весь API (не решено) ⚠️
+В `pom.xml` подключены `spring-boot-starter-security` и
+`spring-boot-starter-security-oauth2-resource-server`, но нигде не настроен ни
+`issuer-uri`, ни `SecurityFilterChain`, ни пользователь/пароль. В результате Spring Boot
+по умолчанию требует HTTP Basic на все запросы (`401` на любой `/api/...`), а сгенерированный
+пароль почему-то не печатается в лог при старте — разобраться в этом отдельно. Из-за этого
+API проверялся только через Spring-контекст (`./mvnw test` — бины поднимаются, таблицы с FK
+создаются), вручную через curl проверить не удалось: не помогло даже исключение
+`SecurityAutoConfiguration` / `UserDetailsServiceAutoConfiguration` /
+`OAuth2ResourceServerAutoConfiguration` через `SPRING_AUTOCONFIGURE_EXCLUDE`.
+**Нужно решение**: либо убрать оба security-стартера, пока нет настоящей аутентификации
+(вернуть их в Фазе 5 вместе с прод-готовностью), либо настроить security сейчас. Пока не
+трогал `pom.xml` дальше — это решение, которое стоит обсудить с Maks, а не делать по-тихому.
 
 ### Не написано:
-- `model/Trade.java`, `model/DecisionLog.java` ❌
 - Frontend/UI ❌
 
 ## План разработки (по шагам)
@@ -86,15 +105,21 @@
 Эта фаза учебная — отработали слои Controller → Service → Repository на простой
 модели, прежде чем переходить к более сложному домену ботов (Фаза 2).
 
-### Фаза 2 — Разворот на домен ботов
-- `Endpoint` → `Bot` (id, name, статус, брокер, стратегия, lastHeartbeatAt)
-- Новая entity `Trade` (botId, symbol, side, qty, price, pnl, timestamp)
-- Новая entity `DecisionLog` (botId, timestamp, action, reasoning — текст объяснения от агента)
-- Переписать Service/Controller под новые entity (повторяем те же паттерны, что в Фазе 1)
+### Фаза 2 — Разворот на домен ботов ✅ завершена
+- ~~`Endpoint` → `Bot`~~ ✅
+- ~~Новая entity `Trade`~~ ✅
+- ~~Новая entity `DecisionLog`~~ ✅
+- ~~Service/Controller под новые entity~~ ✅ (плюс вынесли обработку ошибок в общий
+  `@RestControllerAdvice`, чтобы не дублировать `@ExceptionHandler` в трёх контроллерах)
+- Проверено через `./mvnw test`: Spring-контекст поднимается, Hibernate создаёт таблицы
+  `bots`/`trades`/`decision_logs` с внешними ключами на `bot_id`. Ручную проверку через curl
+  заблокировал незавершённый Spring Security (см. раздел выше) — решить перед Фазой 3.
 
-### Фаза 3 — Данные о ботах
-- Ручной ввод сделок через REST API (пока без брокеров)
-- `@Scheduled` heartbeat-проверка: бот молчит N минут → статус меняется на "down"
+### Фаза 3 — Данные о ботах ← следующая
+- Разобраться с Spring Security (см. известную проблему выше) — иначе руками API не проверить
+- Ручной ввод сделок через REST API (уже есть — `POST /api/bots/{id}/trades`) — осталось
+  проверить руками после решения security
+- `@Scheduled` heartbeat-проверка: бот молчит N минут → статус меняется на DOWN
 - Позже: коннектор к paper-trading / Robinhood MCP для автоматического импорта сделок
 
 ### Фаза 4 — Frontend с графиками
