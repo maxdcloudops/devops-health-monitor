@@ -38,6 +38,9 @@ public class BotService {
     public Bot create(Bot bot) {
         bot.setId(null);
         bot.setCreatedAt(LocalDateTime.now());
+        if (bot.getStatus() == null) {
+            bot.setStatus(BotStatus.STOPPED);
+        }
         return botRepository.save(bot);
     }
 
