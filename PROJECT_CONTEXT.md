@@ -69,6 +69,12 @@
 - `controller/DecisionLogController.java` — REST `/api/bots/{botId}/decisions` (GET/POST) ✅
 - `exception/BotNotFoundException.java` + `exception/GlobalExceptionHandler.java`
   (`@RestControllerAdvice`, общий на все контроллеры) → 404 вместо 500 при несуществующем id ✅
+- `BotService.markStaleBotsDown()` — `@Scheduled` задача (интервал из
+  `app.bot.heartbeat-check-interval-ms`, по умолчанию 60 сек): находит ботов со статусом
+  RUNNING, у которых `lastHeartbeatAt` старше `app.bot.heartbeat-timeout-minutes` (по умолчанию
+  5 мин) или вообще `null`, переводит их в DOWN и пишет `WARN` в лог с именем бота и временем
+  последнего heartbeat ✅
+- `@EnableScheduling` на `DevopsHealthMonitorApplication` — включает работу `@Scheduled` ✅
 - `application.properties` — H2 подключена и работает ✅
 
 ### Решено: `java.version` в `pom.xml` понижен с 26 до 21 ✅
@@ -134,10 +140,17 @@ if (bot.getStatus() == null) {
   отработал без ошибок. По пути убрали недонастроенный Spring Security (блокировал весь API)
   и починили баг с `null` статусом бота при создании (см. разделы выше).
 
-### Фаза 3 — Данные о ботах ← следующая
-- Ручной ввод сделок через REST API — уже работает (`POST /api/bots/{id}/trades`), проверено
-- `@Scheduled` heartbeat-проверка: бот молчит N минут → статус меняется на DOWN
+### Фаза 3 — Данные о ботах ✅ завершена
+- ~~Ручной ввод сделок через REST API~~ ✅ (`POST /api/bots/{id}/trades`), проверено ещё в Фазе 2
+- ~~`@Scheduled` heartbeat-проверка: бот молчит N минут → статус меняется на DOWN~~ ✅
+  — проверено вживую: создал бота, отправил heartbeat (RUNNING), подождал больше
+  `heartbeat-timeout-minutes` — бот сам перешёл в DOWN, в лог упало `WARN Bot ... marked DOWN`
 - Позже: коннектор к paper-trading / Robinhood MCP для автоматического импорта сделок
+
+Осталась учебная тема, не покрытая кодом явно, но уже видна на практике: `@Scheduled` теперь
+из чек-листа ниже можно отметить пройденным — разобрали `fixedDelayString`, настройку интервала
+через `application.properties` и то, почему heartbeat-проверка не трогает ботов в статусе
+STOPPED (это намеренная остановка, а не сбой).
 
 ### Фаза 4 — Frontend с графиками
 - Выбор: Thymeleaf + Chart.js (проще) или React (сложнее но мощнее)
@@ -157,7 +170,7 @@ if (bot.getStatus() == null) {
 - [ ] Spring слои: Controller → Service → Repository → DB
 - [ ] JPA / Hibernate (маппинг объектов в таблицы)
 - [ ] REST API (GET, POST, PUT, DELETE)
-- [ ] @Scheduled (периодические задачи)
+- [x] @Scheduled (периодические задачи) — heartbeat-проверка ботов, Фаза 3
 - [ ] Dependency Injection (@Autowired, конструктор)
 - [ ] DTO паттерн
 - [ ] Exception handling

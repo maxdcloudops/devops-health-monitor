@@ -4,6 +4,10 @@ import com.derbenev.monitor.exception.BotNotFoundException;
 import com.derbenev.monitor.model.Bot;
 import com.derbenev.monitor.model.BotStatus;
 import com.derbenev.monitor.repository.BotRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -12,10 +16,16 @@ import java.util.List;
 @Service
 public class BotService {
 
-    private final BotRepository botRepository;
+    private static final Logger log = LoggerFactory.getLogger(BotService.class);
 
-    public BotService(BotRepository botRepository) {
+    private final BotRepository botRepository;
+    private final long heartbeatTimeoutMinutes;
+
+    public BotService(
+            BotRepository botRepository,
+            @Value("${app.bot.heartbeat-timeout-minutes:5}") long heartbeatTimeoutMinutes) {
         this.botRepository = botRepository;
+        this.heartbeatTimeoutMinutes = heartbeatTimeoutMinutes;
     }
 
     public List<Bot> getAll() {
@@ -65,5 +75,18 @@ public class BotService {
             throw new BotNotFoundException(id);
         }
         botRepository.deleteById(id);
+    }
+
+    @Scheduled(fixedDelayString = "${app.bot.heartbeat-check-interval-ms:60000}")
+    public void markStaleBotsDown() {
+        LocalDateTime threshold = LocalDateTime.now().minusMinutes(heartbeatTimeoutMinutes);
+        List<Bot> staleBots = botRepository.findStale(BotStatus.RUNNING, threshold);
+        if (staleBots.isEmpty()) {
+            return;
+        }
+        staleBots.forEach(bot -> bot.setStatus(BotStatus.DOWN));
+        botRepository.saveAll(staleBots);
+        staleBots.forEach(bot -> log.warn("Bot {} ({}) marked DOWN: no heartbeat since {}",
+                bot.getId(), bot.getName(), bot.getLastHeartbeatAt()));
     }
 }
