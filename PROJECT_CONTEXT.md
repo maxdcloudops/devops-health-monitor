@@ -34,7 +34,12 @@
 
 ## Стек
 - **Backend**: Java 21 (в `pom.xml` было 26, понизили — см. ниже), Spring Boot 4.1.0, Maven
-- **БД**: H2 (для разработки) → PostgreSQL (для прода)
+- **БД**: PostgreSQL (прод/докер, через `docker-compose.yml`), H2 in-memory только для
+  `./mvnw test` (отдельный `src/test/resources/application.properties`, см. ниже, Фаза 5)
+- **Security**: HTTP Basic, один пользователь (логин/пароль через переменные окружения) — см.
+  раздел ниже, Фаза 5
+- **Docker**: `Dockerfile` (multi-stage, eclipse-temurin) + `docker-compose.yml`
+  (app + postgres) — см. раздел ниже, Фаза 5
 - **Frontend**: Thymeleaf + Chart.js (Фаза 4) — server-side рендеринг таблиц, Chart.js
   подключён как локальный статический файл (не CDN), чтобы не зависеть от внешней сети
 - **Источники данных о ботах**: сначала ручной/API ввод сделок, позже — коннекторы
@@ -102,19 +107,86 @@
   `app.bot.pnl-alert-threshold` (по умолчанию -50) ✅
 - Кнопка Restart на `/dashboard` и `/dashboard/bots/{id}` (видна только у ботов не в статусе
   RUNNING) → `POST /dashboard/bots/{id}/restart` → переиспользует `botService.recordHeartbeat()` ✅
-- `application.properties` — H2 подключена и работает ✅
+- `src/main/resources/application.properties` — прод/докер-конфигурация на PostgreSQL
+  (`spring.datasource.url=jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:botops}`
+  и т.д., значения совпадают с `docker-compose.yml`) ✅
+- `src/test/resources/application.properties` — отдельная конфигурация для `./mvnw test` на
+  H2 in-memory, чтобы тесты не требовали поднятой PostgreSQL (Spring Boot сам подхватывает
+  properties из `test/resources`, если они лежат рядом/поверх `main/resources`) ✅
+- `Dockerfile` — multi-stage: `eclipse-temurin:21-jdk` собирает jar через `./mvnw package`,
+  финальный образ — `eclipse-temurin:21-jre` (без Maven/исходников) ✅
+- `docker-compose.yml` — сервисы `db` (postgres:16-alpine, с healthcheck) и `app` (собирается
+  из `Dockerfile`, ждёт готовности `db`), переменные окружения для БД и для Basic Auth
+  логина/пароля ✅
+- `config/SecurityConfig.java` — единственный `SecurityFilterChain` на всё приложение: HTTP
+  Basic на каждый запрос, CSRF явно отключён (см. раздел ниже, почему) ✅
+- `application.properties` — `spring.security.user.name`/`password` берутся из переменных
+  окружения `APP_ADMIN_USER`/`APP_ADMIN_PASSWORD` (дефолты `admin`/`changeme` для локальной
+  разработки без докера) ✅
 
 ### Решено: `java.version` в `pom.xml` понижен с 26 до 21 ✅
 Контейнер разработки даёт только JDK 21, Java 26 ещё не вышла как релиз. `./mvnw test`
 теперь проходит без ручных флагов.
 
-### Решено: Spring Security убран из `pom.xml` ✅
-`spring-boot-starter-security` и `spring-boot-starter-security-oauth2-resource-server` (плюс
-их `-test` артефакты) удалены — они были подключены без единой настройки (`issuer-uri`,
-`SecurityFilterChain`, пользователь/пароль) и блокировали весь API 401-м без возможности
-разобраться руками. Решили вернуть их в Фазе 5 вместе с прод-готовностью, когда будет ясно,
-какая аутентификация нужна (Basic/JWT/OAuth2). До тех пор API открыт — это осознанный выбор
-для локальной разработки, не для прода.
+### Решено (Фаза 2, пересмотрено в Фазе 5): Spring Security возвращён — HTTP Basic, один
+### пользователь ✅
+В Фазе 2 `spring-boot-starter-security` убрали, потому что он был подключён без единой
+настройки (issuer-uri для OAuth2 resource server и т.п.) и блокировал весь API 401-м без
+возможности разобраться руками. В Фазе 5 вернули осознанно — по прямому запросу выбрали
+HTTP Basic с одним пользователем (простой вариант для внутреннего инструмента одного
+оператора, без внешнего identity-провайдера); `spring-boot-starter-security-oauth2-resource-server`
+не возвращали — он не нужен для Basic Auth.
+
+### Найден и исправлен баг: POST-запросы получали 401 даже с верным логином/паролем 🐛✅
+После добавления `spring-boot-starter-security` без дополнительной настройки все `GET`
+запросы (включая `/api/bots`) отрабатывали нормально с Basic Auth, а вот `POST`
+(`/api/bots`, формы на `/dashboard`) — стабильно получали `401`, хотя `Authorization: Basic
+...` заголовок уходил корректно (проверил через `curl -v`). Причина — дефолтная CSRF-защита
+Spring Security: она рассчитана на браузерные cookie-сессии, а не на explicit-credential
+auth (Basic на каждый запрос), и без CSRF-токена в форме/запросе все небезопасные методы
+(`POST`/`PUT`/`DELETE`) отклоняются ещё до контроллера (в логах не было даже намёка на
+INSERT-запрос к БД — значит, запрос не долетал до `DispatcherServlet`). Раз аутентификация
+у нас построена на explicit-credential Basic Auth на каждый запрос (а не на сессионных
+cookie, которые CSRF и призвана защищать), отключение CSRF — не хак, а стандартная,
+рекомендуемая для такой модели авторизации конфигурация. Фикс — `config/SecurityConfig.java`:
+```java
+http.csrf(AbstractHttpConfigurer::disable)
+    .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+    .httpBasic(Customizer.withDefaults());
+```
+Нашёл и проверил это не в тестах (там HTTP-запросов нет, только context load), а полным
+end-to-end прогоном настоящего Docker-образа с настоящим PostgreSQL (см. раздел ниже) —
+если бы просто поверил, что "добавил security-стартер + свойства и всё готово", этот баг
+остался бы незамеченным до реального использования.
+
+### Проверено: полный стек в Docker (app + PostgreSQL) — реально собран и запущен ✅
+В этой dev-песочнице `docker compose build` с чистым `Dockerfile` не проходит "из коробки":
+1. `registry-1.docker.io` (Docker Hub) отдаёт `429 Too Many Requests` на анонимные pull —
+   известное ограничение при работе из общего egress IP. Решение — настроить Docker-демону
+   `registry-mirrors: ["https://mirror.gcr.io"]` (официальное зеркало Docker Hub от Google) в
+   `/etc/docker/daemon.json`. Это настройка окружения/демона, не файлов проекта — `Dockerfile`
+   и `docker-compose.yml` остались со стандартными `eclipse-temurin:21-jdk/jre` и
+   `postgres:16-alpine`, без хардкода mirror.gcr.io.
+2. Внутри контейнера сборки `./mvnw` не мог скачать сам Maven/зависимости — процессы внутри
+   контейнера не видят прокси-инфраструктуру этой конкретной песочницы и не доверяют её CA.
+   Для проверки использовал **отдельный, некоммиченный** `Dockerfile.sandboxtest` (тот же
+   `Dockerfile`, только с `--network host` + доверием к CA прокси + Java truststore внутри
+   build-стадии) — только чтобы убедиться, что реальный код собирается и работает в
+   контейнере. Закоммиченный `Dockerfile` этих сандбокс-специфичных вещей не содержит: у
+   Maks на обычной машине/CI такого прокси нет, и `docker compose build` должен пройти
+   из коробки без дополнительных флагов.
+3. С этим временным образом поднял `postgres:16-alpine` + приложение на общей docker-сети,
+   с переменными окружения как в `docker-compose.yml`. Приложение подключилось к настоящему
+   PostgreSQL (не H2), Hibernate создал таблицы (`check` constraint вместо H2-шного `enum` —
+   ожидаемая разница диалектов), Security сработал: `401` без креденшлов, `401` с неверным
+   паролем, `200`/`201` с верными — и на REST API, и на HTML-формах дашборда (после фикса
+   CSRF-бага выше). Полный сценарий: создать бота через API → heartbeat → создать бота через
+   форму на `/dashboard` → список ботов на дашборде в браузере (Playwright с Basic Auth) —
+   всё отработало. Скриншот отправлен на проверку.
+
+Итог: сам `Dockerfile`/`docker-compose.yml` в репозитории — стандартные и должны собраться
+без специальных танцев на нормальной машине; сандбокс-специфичные обходы прокси нигде не
+закоммичены.
 
 ### Найден и исправлен баг: `Bot.status` был `null` при создании через API 🐛✅
 При `POST /api/bots` без поля `status` в теле запроса Hibernate падал с
@@ -230,12 +302,18 @@ STOPPED (это намеренная остановка, а не сбой).
 пропал из алертов, кнопка Restart для него скрылась (она показывается только не-RUNNING
 ботам). Скриншоты до/после отправлены на проверку.
 
-### Фаза 5 — Прод готовность
-- PostgreSQL вместо H2
-- Docker + docker-compose
-- Вернуть Spring Security (`spring-boot-starter-security` + выбрать между Basic/JWT/OAuth2),
-  убранный в Фазе 2 как недонастроенный — см. раздел выше
-- Опрос v1: показать MVP в r/ai_trading, собрать обратную связь по фичам
+### Фаза 5 — Прод готовность (в процессе)
+- ~~PostgreSQL вместо H2~~ ✅ — прод-конфигурация на Postgres, H2 остался только для тестов
+  (`src/test/resources/application.properties`)
+- ~~Docker + docker-compose~~ ✅ — `Dockerfile` (multi-stage), `docker-compose.yml`
+  (app + postgres с healthcheck). Полный стек реально собран и прогнан в контейнерах
+  (см. раздел выше) — не просто написан вслепую.
+- ~~Вернуть Spring Security~~ ✅ — HTTP Basic, один пользователь (выбор сделан явно, см.
+  раздел выше). По пути нашли и исправили баг с CSRF, ломавший все POST-запросы.
+- PostgreSQL пока без миграций (Flyway/Liquibase) — Hibernate `ddl-auto=update`, как и было
+  на H2. Для реального прода стоит завести миграции, но это осознанно не делали сейчас —
+  не часть исходного запроса на Фазу 5, можно обсудить отдельно.
+- Опрос v1: показать MVP в r/ai_trading, собрать обратную связь по фичам — ещё не делали
 
 ## Ключевые концепции Java для изучения
 (в порядке прохождения)
@@ -248,4 +326,5 @@ STOPPED (это намеренная остановка, а не сбой).
 - [ ] DTO паттерн
 - [ ] Exception handling
 - [ ] Тесты (JUnit 5, Mockito)
-- [ ] Docker для Java приложений
+- [x] Docker для Java приложений — multi-stage `Dockerfile`, `docker-compose.yml`, Фаза 5
+- [ ] Spring Security (Basic Auth уже есть, стоит отдельно разобрать, как это работает изнутри)
