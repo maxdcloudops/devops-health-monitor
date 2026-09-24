@@ -89,6 +89,13 @@
 - Форма создания бота на `/dashboard` (`dashboard.html`, поля name/broker/strategy) →
   `POST /dashboard/bots` в `DashboardController` → `botService.create(...)` → редирект обратно
   на `/dashboard` (Post/Redirect/Get, чтобы обновление страницы не пересоздавало бота) ✅
+- Формы ручного ввода сделки и лога решения на `/dashboard/bots/{id}` (`bot-detail.html`) →
+  `POST /dashboard/bots/{id}/trades` и `POST /dashboard/bots/{id}/decisions` в
+  `DashboardController` → `tradeService.record(...)` / `decisionLogService.record(...)` →
+  редирект обратно на страницу бота (та же таблица/график сама подхватит новые данные через
+  уже существующий `fetch()`). Поле `pnl` опциональное — принимается как `String`, а не
+  `BigDecimal`, и вручную парсится только если не пустое (иначе Spring падает на конвертации
+  пустой строки в `BigDecimal`) ✅
 - `application.properties` — H2 подключена и работает ✅
 
 ### Решено: `java.version` в `pom.xml` понижен с 26 до 21 ✅
@@ -198,7 +205,13 @@ STOPPED (это намеренная остановка, а не сбой).
   (без JS, `POST /dashboard/bots` → редирект), проверено через Playwright: заполнил
   name/broker/strategy, отправил, бот появился в таблице со статусом `STOPPED`, URL после
   сабмита вернулся на `/dashboard` (Post/Redirect/Get сработал)
-- Форма ручного ввода сделки/решения прямо в UI (сейчас только через REST API)
+- ~~Форма ручного ввода сделки/решения прямо в UI~~ ✅ — на `/dashboard/bots/{id}`, тем же
+  паттерном (HTML-форма → `POST` в `DashboardController` → redirect). Проверено через
+  Playwright: добавил сделку без P&L (опциональное поле), сделку с P&L, лог решения — все
+  три появились в соответствующих таблицах и учлись на графике P&L
+
+Фаза 4 в основном закрыта: остались только алерты в UI и кнопка рестарта бота (см. пункты
+выше) — не блокируют переход к Фазе 5, можно вернуться к ним позже.
 
 ### Фаза 5 — Прод готовность
 - PostgreSQL вместо H2
