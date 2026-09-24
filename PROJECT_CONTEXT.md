@@ -123,6 +123,9 @@
 - `application.properties` — `spring.security.user.name`/`password` берутся из переменных
   окружения `APP_ADMIN_USER`/`APP_ADMIN_PASSWORD` (дефолты `admin`/`changeme` для локальной
   разработки без докера) ✅
+- `db/migration/V1__create_bots_table.sql`, `V2__create_trades_table.sql`,
+  `V3__create_decision_logs_table.sql` — Flyway-миграции, единственный источник схемы БД
+  (Hibernate `ddl-auto=validate`, только проверяет) ✅
 
 ### Решено: `java.version` в `pom.xml` понижен с 26 до 21 ✅
 Контейнер разработки даёт только JDK 21, Java 26 ещё не вышла как релиз. `./mvnw test`
@@ -310,10 +313,46 @@ STOPPED (это намеренная остановка, а не сбой).
   (см. раздел выше) — не просто написан вслепую.
 - ~~Вернуть Spring Security~~ ✅ — HTTP Basic, один пользователь (выбор сделан явно, см.
   раздел выше). По пути нашли и исправили баг с CSRF, ломавший все POST-запросы.
-- PostgreSQL пока без миграций (Flyway/Liquibase) — Hibernate `ddl-auto=update`, как и было
-  на H2. Для реального прода стоит завести миграции, но это осознанно не делали сейчас —
-  не часть исходного запроса на Фазу 5, можно обсудить отдельно.
+- ~~Миграции через Flyway~~ ✅ — см. раздел ниже
 - Опрос v1: показать MVP в r/ai_trading, собрать обратную связь по фичам — ещё не делали
+
+### Решено: миграции через Flyway ✅
+Раньше Hibernate сам вёл схему (`ddl-auto=update`) — на H2 и в проде на Postgres. Завели
+Flyway как единственный источник схемы, Hibernate теперь только проверяет (`ddl-auto=validate`),
+что entity-маппинги совпадают с тем, что накатили миграции.
+
+- `pom.xml`: `spring-boot-starter-flyway` (+ `-test` вариант) и `flyway-database-postgresql`.
+  **Важная деталь**: просто добавить `flyway-core` в зависимости — недостаточно! В Spring
+  Boot 4 автоконфигурация разбита на отдельные модули гораздо более гранулярно, чем раньше
+  (`spring-boot-jdbc`, `spring-boot-hibernate`, `spring-boot-security` и т.д. — видно в
+  `./mvnw dependency:tree`), и Flyway не исключение: без `spring-boot-starter-flyway` Spring
+  просто не подключает `FlywayAutoConfiguration`, миграции молча не запускаются, а Hibernate
+  в режиме `validate` падает с `missing table [bots]` на пустой схеме. Нашёл это не
+  интуитивно, а разбором `dependency:tree` и BOM-файла `spring-boot-dependencies` в поисках
+  правильного артефакта.
+- `src/main/resources/db/migration/V1__create_bots_table.sql`, `V2__create_trades_table.sql`,
+  `V3__create_decision_logs_table.sql` — SQL-миграции, повторяющие текущую схему (то, что
+  раньше создавал Hibernate автоматически), плюс явные индексы на `bot_id` в `trades` и
+  `decision_logs` (Postgres не индексирует FK-колонки автоматически, в отличие от некоторых
+  других СУБД — Hibernate их тоже не создавал, а наши запросы вроде
+  `findByBotIdOrderByExecutedAtDesc` всегда фильтруют по `bot_id`).
+- Тестовый `application.properties`: `jdbc:h2:mem:devopsdb;MODE=PostgreSQL` — H2 в режиме
+  совместимости с Postgres, чтобы те же самые SQL-миграции без изменений накатывались и в
+  тестах на H2, и в проде на настоящем Postgres (а не пришлось бы писать миграции дважды под
+  разные диалекты).
+- Проверено на обеих базах реально, не только "должно заработать": `./mvnw test` — Flyway
+  применяет 3 миграции на H2 в логах видно явно (`Migrating schema "PUBLIC" to version...`).
+  Отдельно собрал Docker-образ и поднял с чистым `postgres:16-alpine` в контейнере — Flyway
+  применил те же 3 миграции на настоящем Postgres, Hibernate провалидировал схему успешно;
+  проверил `\d trades` в psql — FK (`trades_bot_id_fkey`), CHECK-constraint на `side`, индекс
+  `idx_trades_bot_id` — всё на месте. Прогнал полный сценарий (создать бота → heartbeat →
+  сделка → невалидный `side` корректно отбивается 400) поверх этой настоящей БД.
+- **Важно для Maks**: если раньше уже поднимали `docker compose up` до этого изменения, в
+  volume `db-data` остались таблицы, созданные Hibernate'ом (`ddl-auto=update`), без истории
+  Flyway-миграций. Flyway откажется мигрировать такую базу молча ("схема не пустая, а истории
+  нет"). Перед первым запуском с Flyway на существующем volume нужно
+  `docker compose down -v` (стирает данные — приемлемо, пока это ещё MVP без реальных
+  пользователей) или, если данные жалко, `flyway baseline`.
 
 ## Ключевые концепции Java для изучения
 (в порядке прохождения)
