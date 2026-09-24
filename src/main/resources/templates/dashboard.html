@@ -24,10 +24,33 @@
         .bot-form input { padding: 0.5rem 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 1rem; }
         .bot-form button { padding: 0.55rem 1.25rem; background: #2563eb; color: white; border: none; border-radius: 6px; font-size: 1rem; cursor: pointer; }
         .bot-form button:hover { background: #1d4ed8; }
+        .alert-card { border-left: 4px solid #dc2626; }
+        .alert-card h2 { color: #991b1b; }
+        .alert-card ul { margin: 0; padding-left: 1.25rem; }
+        .alert-card li { margin-bottom: 0.35rem; }
+        .pnl-negative { color: #991b1b; font-weight: 600; }
+        .pnl-positive { color: #166534; font-weight: 600; }
+        .btn-restart { padding: 0.35rem 0.9rem; background: #2563eb; color: white; border: none; border-radius: 6px; font-size: 0.85rem; cursor: pointer; }
+        .btn-restart:hover { background: #1d4ed8; }
     </style>
 </head>
 <body>
 <h1>Bot Ops Monitor</h1>
+
+<div class="card alert-card" th:if="${!downBots.isEmpty() or !lossyBots.isEmpty()}">
+    <h2>Алерты</h2>
+    <ul>
+        <li th:each="bot : ${downBots}">
+            <a th:href="@{/dashboard/bots/{id}(id=${bot.id})}" th:text="${bot.name}">Бот</a>
+            не отвечает (последний heartbeat:
+            <span th:text="${bot.lastHeartbeatAt} ?: 'никогда'">—</span>)
+        </li>
+        <li th:each="bot : ${lossyBots}">
+            <a th:href="@{/dashboard/bots/{id}(id=${bot.id})}" th:text="${bot.name}">Бот</a>
+            в просадке: суммарный P&amp;L <span th:text="${pnlByBot.get(bot.id)}">-100</span>
+        </li>
+    </ul>
+</div>
 
 <div class="card">
     <h2>Добавить бота</h2>
@@ -53,6 +76,8 @@
         <th>Стратегия</th>
         <th>Статус</th>
         <th>Последний heartbeat</th>
+        <th>Итого P&amp;L</th>
+        <th>Действия</th>
     </tr>
     </thead>
     <tbody>
@@ -62,6 +87,16 @@
         <td th:text="${bot.strategy}">Стратегия</td>
         <td><span class="badge" th:classappend="'badge-' + ${bot.status}" th:text="${bot.status}">STATUS</span></td>
         <td th:text="${bot.lastHeartbeatAt} ?: '—'">—</td>
+        <td>
+            <span th:text="${pnlByBot.get(bot.id)}"
+                  th:classappend="${pnlByBot.get(bot.id).signum() < 0} ? 'pnl-negative' : 'pnl-positive'">0</span>
+        </td>
+        <td>
+            <form th:if="${bot.status.name() != 'RUNNING'}"
+                  th:action="@{/dashboard/bots/{id}/restart(id=${bot.id})}" method="post" style="display:inline;">
+                <button type="submit" class="btn-restart">Restart</button>
+            </form>
+        </td>
     </tr>
     </tbody>
 </table>

@@ -24,6 +24,8 @@
         .entry-form textarea { min-width: 16rem; resize: vertical; }
         .entry-form button { padding: 0.55rem 1.25rem; background: #2563eb; color: white; border: none; border-radius: 6px; font-size: 1rem; cursor: pointer; }
         .entry-form button:hover { background: #1d4ed8; }
+        .btn-restart { padding: 0.35rem 0.9rem; background: #2563eb; color: white; border: none; border-radius: 6px; font-size: 0.85rem; cursor: pointer; }
+        .btn-restart:hover { background: #1d4ed8; }
     </style>
 </head>
 <body>
@@ -34,6 +36,10 @@
     <span class="badge" th:classappend="'badge-' + ${bot.status}" th:text="${bot.status}">STATUS</span>
     &nbsp;· Брокер: <span th:text="${bot.broker}">Robinhood</span>
     &nbsp;· Стратегия: <span th:text="${bot.strategy}">MACD</span>
+    <form th:if="${bot.status.name() != 'RUNNING'}"
+          th:action="@{/dashboard/bots/{id}/restart(id=${bot.id})}" method="post" style="display:inline;">
+        &nbsp;<button type="submit" class="btn-restart">Restart</button>
+    </form>
 </p>
 
 <div class="card">
