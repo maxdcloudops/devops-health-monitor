@@ -86,6 +86,9 @@
   существующему REST API (`/api/bots/{id}/trades`, `/api/bots/{id}/decisions`) — не пришлось
   писать отдельные view-эндпоинты ✅
 - `static/js/chart.umd.js` — Chart.js 4.4.4, локальная копия (не CDN, см. раздел ниже) ✅
+- Форма создания бота на `/dashboard` (`dashboard.html`, поля name/broker/strategy) →
+  `POST /dashboard/bots` в `DashboardController` → `botService.create(...)` → редирект обратно
+  на `/dashboard` (Post/Redirect/Get, чтобы обновление страницы не пересоздавало бота) ✅
 - `application.properties` — H2 подключена и работает ✅
 
 ### Решено: `java.version` в `pom.xml` понижен с 26 до 21 ✅
@@ -191,7 +194,11 @@ STOPPED (это намеренная остановка, а не сбой).
   (Фаза 3), в UI это видно как бейдж, но без всплывающих уведомлений — оставили на потом
 - Кнопка рестарта бота из UI — пока нет; сейчас можно только вручную дёрнуть
   `POST /api/bots/{id}/heartbeat` через API
-- Форма создания бота / ручного ввода сделки прямо в UI (сейчас только через REST API)
+- ~~Форма создания бота прямо в UI~~ ✅ — обычная HTML-форма на `/dashboard`
+  (без JS, `POST /dashboard/bots` → редирект), проверено через Playwright: заполнил
+  name/broker/strategy, отправил, бот появился в таблице со статусом `STOPPED`, URL после
+  сабмита вернулся на `/dashboard` (Post/Redirect/Get сработал)
+- Форма ручного ввода сделки/решения прямо в UI (сейчас только через REST API)
 
 ### Фаза 5 — Прод готовность
 - PostgreSQL вместо H2
