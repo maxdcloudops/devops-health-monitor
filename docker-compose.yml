@@ -1,0 +1,35 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: botops
+      POSTGRES_USER: botops
+      POSTGRES_PASSWORD: botops
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U botops -d botops"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: botops
+      DB_USER: botops
+      DB_PASSWORD: botops
+      APP_ADMIN_USER: admin
+      APP_ADMIN_PASSWORD: changeme
+    ports:
+      - "8080:8080"
+
+volumes:
+  db-data:
