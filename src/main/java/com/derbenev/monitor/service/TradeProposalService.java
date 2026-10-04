@@ -7,6 +7,7 @@ import com.derbenev.monitor.model.DecisionLog;
 import com.derbenev.monitor.model.ProposalStatus;
 import com.derbenev.monitor.model.Trade;
 import com.derbenev.monitor.model.TradeProposal;
+import com.derbenev.monitor.notification.TelegramProposalNotifier;
 import com.derbenev.monitor.repository.TradeProposalRepository;
 import org.springframework.stereotype.Service;
 
@@ -26,16 +27,19 @@ public class TradeProposalService {
     private final BotService botService;
     private final TradeService tradeService;
     private final DecisionLogService decisionLogService;
+    private final TelegramProposalNotifier proposalNotifier;
 
     public TradeProposalService(
             TradeProposalRepository tradeProposalRepository,
             BotService botService,
             TradeService tradeService,
-            DecisionLogService decisionLogService) {
+            DecisionLogService decisionLogService,
+            TelegramProposalNotifier proposalNotifier) {
         this.tradeProposalRepository = tradeProposalRepository;
         this.botService = botService;
         this.tradeService = tradeService;
         this.decisionLogService = decisionLogService;
+        this.proposalNotifier = proposalNotifier;
     }
 
     public List<TradeProposal> listByBot(Long botId) {
@@ -54,7 +58,9 @@ public class TradeProposalService {
         proposal.setStatus(ProposalStatus.PENDING);
         proposal.setCreatedAt(LocalDateTime.now());
         proposal.setDecidedAt(null);
-        return tradeProposalRepository.save(proposal);
+        TradeProposal saved = tradeProposalRepository.save(proposal);
+        proposalNotifier.notifyNewProposal(saved);
+        return saved;
     }
 
     public Trade approve(Long proposalId) {
