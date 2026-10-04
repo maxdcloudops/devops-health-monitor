@@ -32,6 +32,16 @@
         .pnl-positive { color: #166534; font-weight: 600; }
         .btn-restart { padding: 0.35rem 0.9rem; background: #2563eb; color: white; border: none; border-radius: 6px; font-size: 0.85rem; cursor: pointer; }
         .btn-restart:hover { background: #1d4ed8; }
+        .proposal-card { border-left: 4px solid #d97706; }
+        .proposal-card h2 { color: #92400e; }
+        .proposal-card ul { margin: 0; padding: 0; list-style: none; }
+        .proposal-card li { padding: 0.75rem 0; border-bottom: 1px solid #f3f4f6; }
+        .proposal-card li:last-child { border-bottom: none; }
+        .proposal-reasoning { color: #6b7280; display: block; margin: 0.25rem 0 0.5rem; }
+        .btn-approve { padding: 0.35rem 0.9rem; background: #166534; color: white; border: none; border-radius: 6px; font-size: 0.85rem; cursor: pointer; }
+        .btn-approve:hover { background: #14532d; }
+        .btn-reject { padding: 0.35rem 0.9rem; background: #6b7280; color: white; border: none; border-radius: 6px; font-size: 0.85rem; cursor: pointer; margin-left: 0.5rem; }
+        .btn-reject:hover { background: #4b5563; }
     </style>
 </head>
 <body>
@@ -48,6 +58,28 @@
         <li th:each="bot : ${lossyBots}">
             <a th:href="@{/dashboard/bots/{id}(id=${bot.id})}" th:text="${bot.name}">Бот</a>
             в просадке: суммарный P&amp;L <span th:text="${pnlByBot.get(bot.id)}">-100</span>
+        </li>
+    </ul>
+</div>
+
+<div class="card proposal-card" th:if="${!pendingProposals.isEmpty()}">
+    <h2>Ожидают подтверждения</h2>
+    <ul>
+        <li th:each="p : ${pendingProposals}">
+            <a th:href="@{/dashboard/bots/{id}(id=${p.bot.id})}" th:text="${p.bot.name}">Бот</a>
+            предлагает: <strong th:text="${p.side}">BUY</strong>
+            <span th:text="${p.symbol}">TQQQ</span>
+            x<span th:text="${p.quantity}">10</span>
+            @ <span th:text="${p.price}">85.50</span>
+            <span class="proposal-reasoning" th:text="${p.reasoning}">Причина предложения</span>
+            <form th:action="@{/dashboard/proposals/{id}/approve(id=${p.id})}" method="post" style="display:inline;">
+                <input type="hidden" name="botId" th:value="${p.bot.id}">
+                <button type="submit" class="btn-approve">Подтвердить</button>
+            </form>
+            <form th:action="@{/dashboard/proposals/{id}/reject(id=${p.id})}" method="post" style="display:inline;">
+                <input type="hidden" name="botId" th:value="${p.bot.id}">
+                <button type="submit" class="btn-reject">Отклонить</button>
+            </form>
         </li>
     </ul>
 </div>
