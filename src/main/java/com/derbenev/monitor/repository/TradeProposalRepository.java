@@ -12,4 +12,5 @@ public interface TradeProposalRepository extends JpaRepository<TradeProposal, Lo
 
     List<TradeProposal> findByBotIdOrderByCreatedAtDesc(Long botId);
     List<TradeProposal> findByStatusOrderByCreatedAtDesc(ProposalStatus status);
+    boolean existsByBotIdAndSymbolAndStatus(Long botId, String symbol, ProposalStatus status);
 }
