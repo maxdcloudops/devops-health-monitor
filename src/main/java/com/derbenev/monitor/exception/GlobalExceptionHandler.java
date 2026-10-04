@@ -13,4 +13,16 @@ public class GlobalExceptionHandler {
     public String handleBotNotFound(BotNotFoundException ex) {
         return ex.getMessage();
     }
+
+    @ExceptionHandler(TradeProposalNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public String handleTradeProposalNotFound(TradeProposalNotFoundException ex) {
+        return ex.getMessage();
+    }
+
+    @ExceptionHandler(ProposalAlreadyDecidedException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public String handleProposalAlreadyDecided(ProposalAlreadyDecidedException ex) {
+        return ex.getMessage();
+    }
 }

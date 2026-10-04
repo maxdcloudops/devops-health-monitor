@@ -26,6 +26,13 @@
         .entry-form button:hover { background: #1d4ed8; }
         .btn-restart { padding: 0.35rem 0.9rem; background: #2563eb; color: white; border: none; border-radius: 6px; font-size: 0.85rem; cursor: pointer; }
         .btn-restart:hover { background: #1d4ed8; }
+        .badge-PENDING { background: #fef3c7; color: #92400e; }
+        .badge-APPROVED { background: #dcfce7; color: #166534; }
+        .badge-REJECTED { background: #e5e7eb; color: #374151; }
+        .btn-approve { padding: 0.35rem 0.9rem; background: #166534; color: white; border: none; border-radius: 6px; font-size: 0.85rem; cursor: pointer; }
+        .btn-approve:hover { background: #14532d; }
+        .btn-reject { padding: 0.35rem 0.9rem; background: #6b7280; color: white; border: none; border-radius: 6px; font-size: 0.85rem; cursor: pointer; margin-left: 0.5rem; }
+        .btn-reject:hover { background: #4b5563; }
     </style>
 </head>
 <body>
@@ -45,6 +52,65 @@
 <div class="card">
     <h2>P&amp;L по сделкам</h2>
     <canvas id="pnlChart" height="80"></canvas>
+</div>
+
+<div class="card">
+    <h2>Предложения сделок (агент-советник)</h2>
+    <table th:if="${!proposals.isEmpty()}">
+        <thead>
+        <tr>
+            <th>Время</th><th>Символ</th><th>Сторона</th><th>Кол-во</th><th>Цена</th>
+            <th>Объяснение</th><th>Статус</th><th>Действия</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="p : ${proposals}">
+            <td th:text="${p.createdAt}">—</td>
+            <td th:text="${p.symbol}">TQQQ</td>
+            <td><span th:class="'side-' + ${p.side}" th:text="${p.side}">BUY</span></td>
+            <td th:text="${p.quantity}">10</td>
+            <td th:text="${p.price}">85.50</td>
+            <td th:text="${p.reasoning}">Причина</td>
+            <td><span class="badge" th:classappend="'badge-' + ${p.status}" th:text="${p.status}">PENDING</span></td>
+            <td>
+                <span th:if="${p.status.name() != 'PENDING'}">—</span>
+                <form th:if="${p.status.name() == 'PENDING'}"
+                      th:action="@{/dashboard/proposals/{id}/approve(id=${p.id})}" method="post" style="display:inline;">
+                    <input type="hidden" name="botId" th:value="${bot.id}">
+                    <button type="submit" class="btn-approve">Подтвердить</button>
+                </form>
+                <form th:if="${p.status.name() == 'PENDING'}"
+                      th:action="@{/dashboard/proposals/{id}/reject(id=${p.id})}" method="post" style="display:inline;">
+                    <input type="hidden" name="botId" th:value="${bot.id}">
+                    <button type="submit" class="btn-reject">Отклонить</button>
+                </form>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+    <p class="empty" th:if="${proposals.isEmpty()}">Предложений пока нет.</p>
+
+    <form class="entry-form" th:action="@{/dashboard/bots/{id}/proposals(id=${bot.id})}" method="post">
+        <label>Символ
+            <input type="text" name="symbol" required maxlength="255" placeholder="TQQQ">
+        </label>
+        <label>Сторона
+            <select name="side" required>
+                <option value="BUY">BUY</option>
+                <option value="SELL">SELL</option>
+            </select>
+        </label>
+        <label>Кол-во
+            <input type="number" name="quantity" step="any" required>
+        </label>
+        <label>Цена
+            <input type="number" name="price" step="any" required>
+        </label>
+        <label>Объяснение
+            <textarea name="reasoning" rows="2" placeholder="Почему агент предлагает эту сделку"></textarea>
+        </label>
+        <button type="submit">Предложить сделку</button>
+    </form>
 </div>
 
 <div class="card">

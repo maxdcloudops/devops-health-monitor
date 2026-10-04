@@ -4,9 +4,11 @@ import com.derbenev.monitor.model.Bot;
 import com.derbenev.monitor.model.BotStatus;
 import com.derbenev.monitor.model.DecisionLog;
 import com.derbenev.monitor.model.Trade;
+import com.derbenev.monitor.model.TradeProposal;
 import com.derbenev.monitor.model.TradeSide;
 import com.derbenev.monitor.service.BotService;
 import com.derbenev.monitor.service.DecisionLogService;
+import com.derbenev.monitor.service.TradeProposalService;
 import com.derbenev.monitor.service.TradeService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -29,16 +31,19 @@ public class DashboardController {
     private final BotService botService;
     private final TradeService tradeService;
     private final DecisionLogService decisionLogService;
+    private final TradeProposalService tradeProposalService;
     private final BigDecimal pnlAlertThreshold;
 
     public DashboardController(
             BotService botService,
             TradeService tradeService,
             DecisionLogService decisionLogService,
+            TradeProposalService tradeProposalService,
             @Value("${app.bot.pnl-alert-threshold:-50}") BigDecimal pnlAlertThreshold) {
         this.botService = botService;
         this.tradeService = tradeService;
         this.decisionLogService = decisionLogService;
+        this.tradeProposalService = tradeProposalService;
         this.pnlAlertThreshold = pnlAlertThreshold;
     }
 
@@ -67,13 +72,45 @@ public class DashboardController {
         model.addAttribute("pnlByBot", pnlByBot);
         model.addAttribute("downBots", downBots);
         model.addAttribute("lossyBots", lossyBots);
+        model.addAttribute("pendingProposals", tradeProposalService.listPending());
         return "dashboard";
     }
 
     @GetMapping("/dashboard/bots/{id}")
     public String botDetail(@PathVariable Long id, Model model) {
         model.addAttribute("bot", botService.getById(id));
+        model.addAttribute("proposals", tradeProposalService.listByBot(id));
         return "bot-detail";
+    }
+
+    @PostMapping("/dashboard/bots/{id}/proposals")
+    public String createProposal(
+            @PathVariable Long id,
+            @RequestParam String symbol,
+            @RequestParam TradeSide side,
+            @RequestParam BigDecimal quantity,
+            @RequestParam BigDecimal price,
+            @RequestParam(required = false) String reasoning) {
+        TradeProposal proposal = new TradeProposal();
+        proposal.setSymbol(symbol);
+        proposal.setSide(side);
+        proposal.setQuantity(quantity);
+        proposal.setPrice(price);
+        proposal.setReasoning(reasoning);
+        tradeProposalService.propose(id, proposal);
+        return "redirect:/dashboard/bots/" + id;
+    }
+
+    @PostMapping("/dashboard/proposals/{id}/approve")
+    public String approveProposal(@PathVariable Long id, @RequestParam Long botId) {
+        tradeProposalService.approve(id);
+        return "redirect:/dashboard/bots/" + botId;
+    }
+
+    @PostMapping("/dashboard/proposals/{id}/reject")
+    public String rejectProposal(@PathVariable Long id, @RequestParam Long botId) {
+        tradeProposalService.reject(id);
+        return "redirect:/dashboard/bots/" + botId;
     }
 
     @PostMapping("/dashboard/bots/{id}/restart")
